@@ -1,6 +1,13 @@
-#include <stdint.h>
+
 #include "uart.h"
-#include "gpio.h"
+
+#define PIN_TX 24
+#define PIN_RX 25
+#define PIN_DISABLE 0xFFFFFFFF
+#define BAUD_9600 0x00275000
+
+#define UART_DISABLE 0
+#define UART_ENABLE 4
 
 #define UART ((NRF_UART_REG*)(0x40002000))
 
@@ -42,40 +49,58 @@ typedef struct {
     volatile uint32_t CONFIG;
 } NRF_UART_REG;
 
-void uart_init(){
-    for (int i=4;i<=15;i++){
-        GPIO->DIRSET=(1<<i);
-        GPIO->OUTCLR=(1<<i);
-    }
-    GPIO->PIN_CNF[17]=0;
-    GPIO->PIN_CNF[26]=0;
+void uart_init() {
+    // for (int i=4;i<=15;i++) {
+    //     GPIO->DIRSET=(1<<i);
+    //     GPIO->OUTCLR=(1<<i);
+    // }
+    // GPIO->PIN_CNF[17]=0;
+    // GPIO->PIN_CNF[26]=0;
 
-    UART->PSELTXD = 24;         // TXD med pin 24
-    UART->PSELRXD = 25;         // RXD med pin 25
-    UART->BAUDRATE = 0x00275000;      // Baudrate på 9600
+    UART->ENABLE = UART_DISABLE;
 
-    UART->PSELRTS = 0xFFFFFFFF; // Ingen RTS-kobling
-    UART->PSELCTS = 0xFFFFFFFF; // Ingen CTS-kobling
+    GPIO->PIN_CNF[PIN_TX] = 1;
+    GPIO->PIN_CNF[PIN_RX] = 0;
 
-    UART->ENABLE = 4;           // Enable UART
-    UART->STARTRX = 1;          // Begynn å ta i mot meldinger
+    UART->PSELTXD = PIN_TX;         // TXD med pin 24
+    UART->PSELRXD = PIN_RX;         // RXD med pin 25
+    UART->BAUDRATE = BAUD_9600;     // Baudrate på 9600
+
+    UART->PSELRTS = PIN_DISABLE;    // Ingen RTS-kobling
+    UART->PSELCTS = PIN_DISABLE;    // Ingen CTS-kobling
+
+    UART->ENABLE = UART_ENABLE;     // Enable UART
+    UART->STARTRX = 1;              // Begynn å ta i mot meldinger
 }
 
-void uart_send(char letter) {
+void uart_send(uint8_t byte) {
     UART->STARTTX = 1;
-    UART->TXD = letter;
+    UART->TXD = byte;
+
     while(!(UART->TXDRDY));
+    UART->TXDRDY = 0;
 
     UART->STOPTX = 1;
 }
 
-char uart_read(){
-    char letter;
-    UART->RXDRDY = 0;
-    if (UART->RXDRDY){
-        letter=UART->RXD;
-    }else{
-        letter='\0';
+// char uart_read() {
+//     char letter;
+//     UART->RXDRDY = 0;
+//     if (UART->RXDRDY) {
+//         letter=UART->RXD;
+//     }
+//     else {
+//         letter='\0';
+//     }
+//     return letter;
+// }
+
+uint8_t uart_receive(uint8_t* p_byte) {
+    if(!UART->RXDRDY) {
+        return 0;
     }
-    return letter;
+
+    UART->RXDRDY = 0;
+    *p_byte = UART->RXD;
+    return 1;
 }
